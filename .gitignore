@@ -1,0 +1,16 @@
+/build
+*.class
+/bin/
+.settings
+settings.xml
+target/
+target/*
+*.venv
+*/venv
+*__pycache__*
+.classpath
+.project
+.factorypath
+.vscode/
+*.war
+.idea/
