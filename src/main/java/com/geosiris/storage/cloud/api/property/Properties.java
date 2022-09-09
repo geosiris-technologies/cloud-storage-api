@@ -67,7 +67,7 @@ public abstract class Properties {
                 f.set(this, iniFile.get(className.toLowerCase(), f.getName(), f.getType()));
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error(e);
         }
         // Override with env variables
         for (Field f : fields) {
