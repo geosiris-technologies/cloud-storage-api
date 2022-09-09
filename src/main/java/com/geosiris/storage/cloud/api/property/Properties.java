@@ -154,16 +154,17 @@ public abstract class Properties {
     public String toString() {
         String className = this.getClass().getSimpleName();
         className = className.replaceAll("Propert[yi](es)*", "");
-        String result = "[" + className.toLowerCase() + "]\n";
+        StringBuilder result = new StringBuilder("[" + className.toLowerCase() + "]\n");
         for (Field f : this.getClass().getDeclaredFields()) {
             Method getter = searchGetter(f, this.getClass());
             try {
-                result += "" + f.getName() + "=" + getter.invoke(this) + " \n";
+                assert getter != null;
+                result.append("").append(f.getName()).append("=").append(getter.invoke(this)).append(" \n");
             } catch (Exception e) {
                 logger.error(e);
             }
         }
-        return result;
+        return result.toString();
     }
 
     public String toJson(){
