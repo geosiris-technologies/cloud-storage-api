@@ -1,5 +1,6 @@
 # Cloud Storage Api
 
+[![SonarCloud](https://sonarcloud.io/images/project_badges/sonarcloud-orange.svg)](https://sonarcloud.io/summary/new_code?id=geosiris-technologies_cloud-storage-api)
 
 ## Introduction
 

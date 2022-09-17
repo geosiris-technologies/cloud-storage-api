@@ -15,15 +15,16 @@ limitations under the License.
 */
 package com.geosiris.storage.cloud.api.property;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-
 import com.google.gson.Gson;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.ini4j.Wini;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * Sub class of Properties should be named as : [XXX]Properties or [XXX]Property
@@ -63,8 +64,17 @@ public abstract class Properties {
             }
 
             for (Field f : fields) {
-                f.setAccessible(true);
-                f.set(this, iniFile.get(className.toLowerCase(), f.getName(), f.getType()));
+                Method mSetter = searchSetter(f, this.getClass());
+                Object value = iniFile.get(className.toLowerCase(), f.getName(), f.getType());
+                if(mSetter != null) {
+                    try {
+                        mSetter.invoke(this, value);
+                    }catch (IllegalAccessException | InvocationTargetException e) {
+                        logger.error(e.getMessage(), e);
+                    }
+                }else{
+                    logger.error("Failed to assign value '" + value + "' to property " + f.getName() + " because no setter was found in the class");
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -73,49 +83,88 @@ public abstract class Properties {
         for (Field f : fields) {
             String envVar = System.getenv(className.toLowerCase() + "_" + f.getName());
             if(envVar != null) {
-                f.setAccessible(true);
-                try {
-                    f.set(this, envVar);
-                } catch (IllegalArgumentException e) {
+                Method mSetter = searchSetter(f, this.getClass());
+                if(mSetter != null) {
                     try {
-                        Method fromStringMethod = null;
-                        for(Method m : f.getType().getMethods()){
-                            if((m.getName().compareToIgnoreCase("fromString") == 0
-                                    || m.getName().compareToIgnoreCase("valueOf") == 0
-                                    || m.getName().compareToIgnoreCase("parse" + f.getType()) == 0)
-                                    && m.getParameterCount() == 1
-                                    && m.getParameters()[0].getType() == String.class){
-                                fromStringMethod = m;
-                                break;
-                            }
+                        mSetter.invoke(this, envVar);
+                    } catch (IllegalArgumentException e) {
+                        try {
+                            Method fromStringMethod = searchFromString(f);
+                            assert fromStringMethod != null;
+                            mSetter.invoke(this, fromStringMethod.invoke(f, envVar));
+                        } catch (Exception e2) {
+                            logger.error("Failed to assign value '" + envVar + "' to property " + f.getName() + " because failed to set it from string. You should provide a method \"T fromString(String s)\" or \"T valueOf(String s)\" in the class.");
+                            logger.error(e2.getMessage(), e2);
                         }
-                        assert fromStringMethod != null;
-                        f.set(this, fromStringMethod.invoke(f, envVar));
-                    }catch (Exception e2){
-                        logger.error("Failed to assign value '" + envVar + "' to property " + f.getName() + " because failed to set it from string. You should provide a method \"T fromString(String s)\" or \"T valueOf(String s)\" in the class.");
-                        logger.error(e2.getMessage(), e2);
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        logger.error(e.getMessage(), e);
                     }
-                }catch (IllegalAccessException e){
-                    logger.error(e);
+                }else{
+                    logger.error("Failed to assign value '" + envVar + "' to property " + f.getName() + " because no setter was found in the class");
                 }
             }
         }
+    }
+
+    private static Method searchSetter(Field f, Class<?> classContaining_f){
+        Method[] methods = classContaining_f.getMethods();
+        for(Method m : methods){
+            // I suppose no user will create attibutes with only case difference in the name
+            if( (m.getName().compareToIgnoreCase("set" + f.getName()) == 0
+                    || m.getName().compareToIgnoreCase("is" + f.getName()) == 0)
+                    && (m.getParameters().length == 1 && m.getParameters()[0].getType() == f.getType())
+                    && m.getReturnType() == void.class
+            ){
+                return m;
+            }
+        }
+        return null;
+    }
+
+    private static Method searchGetter(Field f, Class<?> classContaining_f){
+        Method[] methods = classContaining_f.getMethods();
+        for(Method m : methods){
+            // I suppose no user will create attibutes with only case difference in the name
+            if( (m.getName().compareToIgnoreCase("get" + f.getName()) == 0
+                    || m.getName().compareToIgnoreCase("is" + f.getName()) == 0)
+                    && (m.getParameters().length == 0)
+                    && m.getReturnType() == f.getType()
+            ){
+                return m;
+            }
+        }
+        return null;
+    }
+
+    private static Method searchFromString(Field f){
+        Method[] methods = f.getType().getMethods();
+        for (Method m : methods) {
+            if ((m.getName().compareToIgnoreCase("fromString") == 0
+                    || m.getName().compareToIgnoreCase("valueOf") == 0
+                    || m.getName().compareToIgnoreCase("parse" + f.getType()) == 0)
+                    && m.getParameterCount() == 1
+                    && m.getParameters()[0].getType() == String.class) {
+                return m;
+            }
+        }
+        return null;
     }
 
     @Override
     public String toString() {
         String className = this.getClass().getSimpleName();
         className = className.replaceAll("Propert[yi](es)*", "");
-        String result = "[" + className.toLowerCase() + "]\n";
+        StringBuilder result = new StringBuilder("[" + className.toLowerCase() + "]\n");
         for (Field f : this.getClass().getDeclaredFields()) {
-            f.setAccessible(true);
+            Method getter = searchGetter(f, this.getClass());
             try {
-                result += "" + f.getName() + "=" + f.get(this) + " \n";
+                assert getter != null;
+                result.append("").append(f.getName()).append("=").append(getter.invoke(this)).append(" \n");
             } catch (Exception e) {
                 logger.error(e);
             }
         }
-        return result;
+        return result.toString();
     }
 
     public String toJson(){
