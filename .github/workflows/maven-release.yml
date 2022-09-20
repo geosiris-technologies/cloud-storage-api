@@ -2,10 +2,10 @@ name: Maven Package Cloud Storage API
 
 on:
   release:
-    types: [created]
+    types: [published]
 
-  pull_request:
-    branches: main
+  # pull_request:
+  #   branches: main
 
 jobs:
   build:
